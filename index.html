@@ -175,7 +175,7 @@
     </section>
 
     <div class="photo-card">
-      <img src="./cats.jpg" alt="猫たちの写真" />
+      <img id="catPhoto" src="./cats1.jpg" alt="猫たちの写真" />
     </div>
 
     <section class="bottom">
@@ -209,12 +209,49 @@
     const feedButton = document.getElementById("feedButton");
     const undoButton = document.getElementById("undoButton");
     const setupEl = document.getElementById("setup");
+    const catPhotoEl = document.getElementById("catPhoto");
 
     let lastFeedMs = null;
     let previousFeedMs = null;
     let undoTimer = null;
     let db = null;
     let stateRef = null;
+    let photoIndex = 0;
+    let previousPhotoIndex = null;
+
+    const photoFiles = [
+      "./cats1.jpg",
+      "./cats2.jpg",
+      "./cats3.jpg",
+      "./cats4.jpg",
+      "./cats5.jpg",
+      "./cats6.jpg",
+      "./cats7.jpg",
+      "./cats8.jpg",
+      "./cats9.jpg",
+      "./cats10.jpg"
+    ];
+
+    function showPhoto(index) {
+      const safeIndex = Number.isInteger(index) && index >= 0 && index < photoFiles.length ? index : 0;
+      photoIndex = safeIndex;
+      catPhotoEl.src = photoFiles[safeIndex];
+    }
+
+    function chooseDifferentPhotoIndex(current) {
+      if (photoFiles.length <= 1) return 0;
+      let next;
+      do {
+        next = Math.floor(Math.random() * photoFiles.length);
+      } while (next === current);
+      return next;
+    }
+
+    // 切り替え時にもすぐ表示できるよう写真を先読み
+    photoFiles.forEach(src => {
+      const img = new Image();
+      img.src = src;
+    });
 
     const isConfigured = !Object.values(firebaseConfig).some(v => String(v).includes("PASTE_YOUR_"));
 
@@ -262,10 +299,13 @@
       if (!stateRef) return;
       feedButton.disabled = true;
       previousFeedMs = lastFeedMs;
+      previousPhotoIndex = photoIndex;
+      const nextPhotoIndex = chooseDifferentPhotoIndex(photoIndex);
       const now = Date.now();
 
       // 体感を速くするため、まず画面だけ即座に0へ。
       lastFeedMs = now;
+      showPhoto(nextPhotoIndex);
       renderTimer();
       renderLast();
       statusEl.textContent = "保存中…";
@@ -273,11 +313,14 @@
       try {
         await setDoc(stateRef, {
           lastFeedAt: serverTimestamp(),
-          previousFeedAtMs: previousFeedMs ?? null
+          previousFeedAtMs: previousFeedMs ?? null,
+          photoIndex: nextPhotoIndex,
+          previousPhotoIndex: previousPhotoIndex
         }, { merge: true });
         showUndo();
       } catch (e) {
         lastFeedMs = previousFeedMs;
+        if (previousPhotoIndex != null) showPhoto(previousPhotoIndex);
         renderTimer();
         renderLast();
         statusEl.textContent = "保存できませんでした。通信を確認してください";
@@ -294,7 +337,9 @@
       try {
         await setDoc(stateRef, {
           lastFeedAt: new Date(previousFeedMs),
-          previousFeedAtMs: null
+          previousFeedAtMs: null,
+          photoIndex: previousPhotoIndex ?? photoIndex,
+          previousPhotoIndex: null
         }, { merge: true });
         statusEl.textContent = "取り消しました";
       } catch (e) {
@@ -322,6 +367,7 @@
         onSnapshot(stateRef, (snap) => {
           if (!snap.exists()) {
             lastFeedMs = null;
+            showPhoto(0);
             renderLast();
             statusEl.textContent = "準備OK";
             return;
@@ -334,6 +380,18 @@
             typeof data.previousFeedAtMs === "number"
               ? data.previousFeedAtMs
               : previousFeedMs;
+
+          if (Number.isInteger(data.photoIndex)) {
+            showPhoto(data.photoIndex);
+          } else {
+            showPhoto(0);
+          }
+
+          previousPhotoIndex =
+            Number.isInteger(data.previousPhotoIndex)
+              ? data.previousPhotoIndex
+              : previousPhotoIndex;
+
           renderTimer();
           renderLast();
           statusEl.textContent = "共有中";
