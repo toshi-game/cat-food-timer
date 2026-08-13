@@ -232,10 +232,24 @@
       "./cats10.jpg"
     ];
 
+    const photoPositions = [
+      "50% 50%",  // cats1
+      "50% 50%",  // cats2
+      "50% 70%",  // cats3
+      "50% 50%",  // cats4
+      "50% 50%",  // cats5
+      "50% 50%",  // cats6
+      "50% 50%",  // cats7
+      "50% 50%",  // cats8
+      "50% 50%",  // cats9
+      "50% 66%"   // cats10
+    ];
+
     function showPhoto(index) {
       const safeIndex = Number.isInteger(index) && index >= 0 && index < photoFiles.length ? index : 0;
       photoIndex = safeIndex;
       catPhotoEl.src = photoFiles[safeIndex];
+      catPhotoEl.style.objectPosition = photoPositions[safeIndex] || "50% 50%";
     }
 
     function chooseDifferentPhotoIndex(current) {
