@@ -41,9 +41,9 @@
       justify-content: space-between;
       align-items: center;
       padding:
-        calc(var(--safe-top) + 28px)
+        calc(var(--safe-top) + 20px)
         18px
-        calc(var(--safe-bottom) + 22px);
+        calc(var(--safe-bottom) + 18px);
     }
     .top {
       width: 100%;
@@ -75,6 +75,22 @@
       margin-top: 8px;
       font-size: 14px;
       opacity: .9;
+    }
+    .photo-card {
+      width: min(100%, 520px);
+      margin: 18px auto 12px;
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+      border: 2px solid rgba(255,255,255,.28);
+      background: rgba(255,255,255,.08);
+    }
+    .photo-card img {
+      display: block;
+      width: 100%;
+      height: clamp(220px, 42vh, 360px);
+      object-fit: cover;
+      object-position: center;
     }
     .bottom {
       width: min(100%, 520px);
@@ -157,6 +173,10 @@
       <div id="last" class="last">最終給餌：--</div>
       <div id="status" class="status">接続中…</div>
     </section>
+
+    <div class="photo-card">
+      <img src="./cats.jpg" alt="猫たちの写真" />
+    </div>
 
     <section class="bottom">
       <button id="feedButton" class="feed" type="button">🍚 ごはんをあげた</button>
