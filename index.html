@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#111111" />
+  <title>猫ごはんタイマー</title>
+  <style>
+    :root {
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+      background: #222;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body {
+      min-height: 100svh;
+    }
+    .app {
+      position: relative;
+      width: 100%;
+      height: 100svh;
+      background:
+        linear-gradient(rgba(0,0,0,.28), rgba(0,0,0,.52)),
+        url("./background.jpg") center/cover no-repeat,
+        linear-gradient(160deg, #8a8178, #4e4a46);
+      color: white;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      padding:
+        calc(var(--safe-top) + 28px)
+        18px
+        calc(var(--safe-bottom) + 22px);
+    }
+    .top {
+      width: 100%;
+      text-align: center;
+      text-shadow: 0 2px 10px rgba(0,0,0,.55);
+    }
+    .label {
+      font-size: clamp(18px, 5vw, 24px);
+      font-weight: 700;
+      letter-spacing: .03em;
+      margin-bottom: 10px;
+    }
+    .elapsed {
+      font-variant-numeric: tabular-nums;
+      font-size: clamp(42px, 13vw, 72px);
+      line-height: 1.05;
+      font-weight: 800;
+      letter-spacing: -.03em;
+      white-space: nowrap;
+    }
+    .last {
+      margin-top: 12px;
+      font-size: clamp(15px, 4.2vw, 20px);
+      font-weight: 600;
+      opacity: .95;
+    }
+    .status {
+      min-height: 24px;
+      margin-top: 8px;
+      font-size: 14px;
+      opacity: .9;
+    }
+    .bottom {
+      width: min(100%, 520px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    .feed {
+      width: 100%;
+      min-height: 92px;
+      border: 0;
+      border-radius: 28px;
+      background: rgba(255,255,255,.94);
+      color: #181818;
+      font-size: clamp(24px, 7vw, 34px);
+      font-weight: 800;
+      box-shadow: 0 8px 28px rgba(0,0,0,.35);
+      cursor: pointer;
+    }
+    .feed:active { transform: scale(.985); }
+    .feed:disabled { opacity: .65; }
+    .undo {
+      min-height: 42px;
+      padding: 8px 18px;
+      border: 1px solid rgba(255,255,255,.55);
+      border-radius: 999px;
+      background: rgba(0,0,0,.38);
+      color: white;
+      font-size: 16px;
+      font-weight: 700;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s ease;
+    }
+    .undo.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .hint {
+      font-size: 13px;
+      opacity: .8;
+      text-shadow: 0 1px 4px rgba(0,0,0,.65);
+    }
+    .setup {
+      position: fixed;
+      inset: 0;
+      background: #f7f7f7;
+      color: #222;
+      padding: calc(var(--safe-top) + 24px) 22px calc(var(--safe-bottom) + 24px);
+      overflow: auto;
+      z-index: 10;
+    }
+    .setup.hidden { display: none; }
+    .setup h1 { font-size: 26px; margin: 0 0 14px; }
+    .setup p, .setup li { line-height: 1.65; font-size: 16px; }
+    .setup code {
+      display: block;
+      white-space: pre-wrap;
+      background: #e9e9e9;
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 13px;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+  </style>
+</head>
+<body>
+  <div id="setup" class="setup hidden">
+    <h1>初回設定が必要です</h1>
+    <p>このファイルの <strong>firebaseConfig</strong> にFirebaseの設定値を貼り付けると、家族3台で共有できます。</p>
+    <p>詳しい手順は同梱の「設定手順.txt」を見てください。</p>
+  </div>
+
+  <main class="app">
+    <section class="top" aria-live="polite">
+      <div class="label">前回のごはんから</div>
+      <div id="elapsed" class="elapsed">--:--:--</div>
+      <div id="last" class="last">最終給餌：--</div>
+      <div id="status" class="status">接続中…</div>
+    </section>
+
+    <section class="bottom">
+      <button id="feedButton" class="feed" type="button">🍚 ごはんをあげた</button>
+      <button id="undoButton" class="undo" type="button">取り消す</button>
+      <div class="hint">押すと3台すべての時間がリセットされます</div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
+    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js";
+    import {
+      getFirestore, doc, onSnapshot, setDoc, serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js";
+
+    // ===== ここだけFirebaseの値に置き換えます =====
+    const firebaseConfig = {
+      apiKey: "AIzaSyCEQdIJmnv2kIoxcj0dpyBDs8aCuNay3FU",
+      authDomain: "cat-food-timer.firebaseapp.com",
+      projectId: "cat-food-timer",
+      storageBucket: "cat-food-timer.firebasestorage.app",
+      messagingSenderId: "74272212743",
+      appId: "1:74272212743:web:7ebc11ed8b9bd0fd65a7a2"
+    };
+    // ============================================
+
+    const elapsedEl = document.getElementById("elapsed");
+    const lastEl = document.getElementById("last");
+    const statusEl = document.getElementById("status");
+    const feedButton = document.getElementById("feedButton");
+    const undoButton = document.getElementById("undoButton");
+    const setupEl = document.getElementById("setup");
+
+    let lastFeedMs = null;
+    let previousFeedMs = null;
+    let undoTimer = null;
+    let db = null;
+    let stateRef = null;
+
+    const isConfigured = !Object.values(firebaseConfig).some(v => String(v).includes("PASTE_YOUR_"));
+
+    function pad(n) {
+      return String(n).padStart(2, "0");
+    }
+
+    function renderTimer() {
+      if (!lastFeedMs) {
+        elapsedEl.textContent = "00:00:00";
+        return;
+      }
+      const sec = Math.max(0, Math.floor((Date.now() - lastFeedMs) / 1000));
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = sec % 60;
+      elapsedEl.textContent = `${pad(h)}:${pad(m)}:${pad(s)}`;
+    }
+
+    function renderLast() {
+      if (!lastFeedMs) {
+        lastEl.textContent = "最終給餌：まだ記録がありません";
+        return;
+      }
+      const d = new Date(lastFeedMs);
+      const today = new Date();
+      const sameDay =
+        d.getFullYear() === today.getFullYear() &&
+        d.getMonth() === today.getMonth() &&
+        d.getDate() === today.getDate();
+
+      const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      lastEl.textContent = sameDay
+        ? `最終給餌：今日 ${time}`
+        : `最終給餌：${d.getMonth()+1}/${d.getDate()} ${time}`;
+    }
+
+    function showUndo() {
+      clearTimeout(undoTimer);
+      undoButton.classList.add("show");
+      undoTimer = setTimeout(() => undoButton.classList.remove("show"), 5000);
+    }
+
+    async function recordFeed() {
+      if (!stateRef) return;
+      feedButton.disabled = true;
+      previousFeedMs = lastFeedMs;
+      const now = Date.now();
+
+      // 体感を速くするため、まず画面だけ即座に0へ。
+      lastFeedMs = now;
+      renderTimer();
+      renderLast();
+      statusEl.textContent = "保存中…";
+
+      try {
+        await setDoc(stateRef, {
+          lastFeedAt: serverTimestamp(),
+          previousFeedAtMs: previousFeedMs ?? null
+        }, { merge: true });
+        showUndo();
+      } catch (e) {
+        lastFeedMs = previousFeedMs;
+        renderTimer();
+        renderLast();
+        statusEl.textContent = "保存できませんでした。通信を確認してください";
+        console.error(e);
+      } finally {
+        feedButton.disabled = false;
+      }
+    }
+
+    async function undoFeed() {
+      if (!stateRef || previousFeedMs == null) return;
+      undoButton.classList.remove("show");
+      clearTimeout(undoTimer);
+      try {
+        await setDoc(stateRef, {
+          lastFeedAt: new Date(previousFeedMs),
+          previousFeedAtMs: null
+        }, { merge: true });
+        statusEl.textContent = "取り消しました";
+      } catch (e) {
+        statusEl.textContent = "取り消しに失敗しました";
+        console.error(e);
+      }
+    }
+
+    async function start() {
+      if (!isConfigured) {
+        setupEl.classList.remove("hidden");
+        return;
+      }
+
+      try {
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        db = getFirestore(app);
+
+        await signInAnonymously(auth);
+
+        // 家族全員が同じ1個のドキュメントを見る
+        stateRef = doc(db, "catFood", "sharedState");
+
+        onSnapshot(stateRef, (snap) => {
+          if (!snap.exists()) {
+            lastFeedMs = null;
+            renderLast();
+            statusEl.textContent = "準備OK";
+            return;
+          }
+          const data = snap.data();
+          if (data.lastFeedAt?.toMillis) {
+            lastFeedMs = data.lastFeedAt.toMillis();
+          }
+          previousFeedMs =
+            typeof data.previousFeedAtMs === "number"
+              ? data.previousFeedAtMs
+              : previousFeedMs;
+          renderTimer();
+          renderLast();
+          statusEl.textContent = "共有中";
+        }, (error) => {
+          statusEl.textContent = "共有データを読み込めません";
+          console.error(error);
+        });
+      } catch (e) {
+        statusEl.textContent = "Firebaseに接続できません";
+        console.error(e);
+      }
+    }
+
+    feedButton.addEventListener("click", recordFeed);
+    undoButton.addEventListener("click", undoFeed);
+
+    // ダブルタップ拡大の誤操作を抑制
+    let lastTouchEnd = 0;
+    document.addEventListener("touchend", (e) => {
+      const now = Date.now();
+      if (now - lastTouchEnd <= 300) e.preventDefault();
+      lastTouchEnd = now;
+    }, { passive: false });
+
+    setInterval(renderTimer, 1000);
+    start();
+  </script>
+</body>
+</html>
